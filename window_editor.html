@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Load Report — Редактор окна</title>
+<style>
+  :root{
+    --bg:#0a0a0b;
+    --panel:#131316;
+    --panel2:#1b1b1f;
+    --line:#2a2a2f;
+    --text:#eaeaec;
+    --sub:#8b8b93;
+    --accent:#39ff8f; /* заменяется живым цветом темы ниже, но по умолчанию зелёный акцент лаборатории */
+    --accent-dim:#39ff8f55;
+    --mono:'JetBrains Mono','Consolas',monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100vh;}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:34px 28px 60px;}
+
+  .top{display:flex;align-items:baseline;justify-content:space-between;gap:20px;
+    border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:28px;flex-wrap:wrap;}
+  .top h1{font-size:20px;margin:0;font-weight:600;letter-spacing:.2px;}
+  .top h1 span{color:var(--accent);}
+  .top .status{font-family:var(--mono);font-size:12px;color:var(--sub);}
+  .top .status.ok{color:var(--accent);}
+  .top .status.err{color:#ff5a5a;}
+
+  .grid{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start;}
+  @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+
+  /* ===== ПРЕВЬЮ ===== */
+  .previewCol{position:sticky;top:24px;}
+  .previewStage{
+    background:
+      radial-gradient(circle at 30% 20%, #16161a 0%, #0a0a0b 70%);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:40px 24px;
+    display:flex;align-items:center;justify-content:center;min-height:260px;
+    overflow:hidden;
+    position:relative;
+  }
+  .previewStage::before{
+    content:"ПРЕДПРОСМОТР";
+    position:absolute;top:10px;left:14px;
+    font-family:var(--mono);font-size:10px;letter-spacing:2px;color:#4a4a52;
+  }
+  .catchWin{
+    position:relative;
+    background:#0f0f10ee;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:0 0 0 18px;
+  }
+  .catchWin svg.border{position:absolute;inset:0;pointer-events:none;}
+  .catchWin .title{font-size:15px;color:var(--text);font-weight:600;margin-bottom:6px;}
+  .catchWin .row{font-size:12.5px;color:#b9b9c0;display:flex;align-items:center;gap:14px;font-family:var(--mono);}
+  .catchWin .row b{color:var(--accent);font-weight:600;}
+
+  .previewNote{margin-top:12px;font-size:11.5px;color:var(--sub);line-height:1.5;text-align:center;}
+
+  /* ===== ФОРМА ===== */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px;}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:1.6px;color:var(--sub);
+    margin:0 0 16px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .panel h2::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;}
+
+  .field{margin-bottom:16px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:flex;justify-content:space-between;font-size:13px;color:var(--text);margin-bottom:8px;}
+  .field label .val{font-family:var(--mono);color:var(--accent);font-size:12.5px;}
+
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:4px;border-radius:2px;
+    background:var(--line);outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--accent);cursor:pointer;border:2px solid #0a0a0b;
+    box-shadow:0 0 0 1px var(--accent);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;background:var(--accent);
+    cursor:pointer;border:2px solid #0a0a0b;box-shadow:0 0 0 1px var(--accent);
+  }
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+  .toggle{display:flex;align-items:center;justify-content:space-between;
+    padding:11px 0;border-bottom:1px solid #1e1e22;}
+  .toggle:last-child{border-bottom:none;}
+  .toggle .label{font-size:13.5px;}
+  .toggle .desc{font-size:11.5px;color:var(--sub);margin-top:2px;}
+  .switch{position:relative;width:38px;height:22px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;inset:0;background:#2a2a2f;border-radius:22px;transition:.18s;cursor:pointer;}
+  .slider::before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;
+    background:#8b8b93;border-radius:50%;transition:.18s;}
+  input:checked + .slider{background:var(--accent-dim);}
+  input:checked + .slider::before{transform:translateX(16px);background:var(--accent);}
+
+  .actions{display:flex;gap:10px;align-items:center;margin-top:6px;}
+  button{
+    font-family:inherit;font-size:13.5px;font-weight:600;border:none;border-radius:9px;
+    padding:12px 22px;cursor:pointer;transition:.15s;
+  }
+  .btn-save{background:var(--accent);color:#07110b;}
+  .btn-save:hover{filter:brightness(1.08);}
+  .btn-save:active{transform:scale(.97);}
+  .btn-reset{background:transparent;color:var(--sub);border:1px solid var(--line);}
+  .btn-reset:hover{color:var(--text);border-color:#3a3a40;}
+
+  .hint{font-size:11.5px;color:var(--sub);margin-top:10px;line-height:1.5;}
+  code{background:#000;padding:1px 5px;border-radius:4px;font-family:var(--mono);color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <h1>Load<span>::</span>Report — редактор окна ловли</h1>
+    <div class="status" id="status">подключение к скрипту…</div>
+  </div>
+
+  <div class="grid">
+
+    <div class="previewCol">
+      <div class="previewStage">
+        <div class="catchWin" id="catchWin">
+          <svg class="border" id="borderSvg"><rect id="borderRect" fill="none"/></svg>
+          <div class="title">Ловля..</div>
+          <div class="row" id="rowPing">Ping: <b>62</b></div>
+          <div class="row" id="rowTimer">00:47</div>
+          <div class="row" id="rowAtt">Попыток: <b>2</b></div>
+        </div>
+      </div>
+      <div class="previewNote">Живой макет окна с учётом ваших настроек.<br>Цвет темы задаётся отдельно, через <code>/loadcolor</code>.</div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Размер окна</h2>
+        <div class="row2">
+          <div class="field">
+            <label>Ширина <span class="val" id="wVal">250</span></label>
+            <input type="range" id="w" min="180" max="420" value="250">
+          </div>
+          <div class="field">
+            <label>Высота <span class="val" id="hVal">68</span></label>
+            <input type="range" id="h" min="50" max="140" value="68">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Пунктирная рамка</h2>
+        <div class="field">
+          <label>Скругление углов <span class="val" id="cornerRadiusVal">12</span></label>
+          <input type="range" id="cornerRadius" min="0" max="26" value="12">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Длина штриха <span class="val" id="dashLenVal">10</span></label>
+            <input type="range" id="dashLen" min="2" max="30" value="10">
+          </div>
+          <div class="field">
+            <label>Длина пробела <span class="val" id="gapLenVal">8</span></label>
+            <input type="range" id="gapLen" min="2" max="30" value="8">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Скорость бега <span class="val" id="dashSpeedVal">25</span></label>
+            <input type="range" id="dashSpeed" min="0" max="80" value="25">
+          </div>
+          <div class="field">
+            <label>Толщина линии <span class="val" id="borderThicknessVal">1.5</span></label>
+            <input type="range" id="borderThickness" min="0.5" max="5" step="0.5" value="1.5">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Отображаемые данные</h2>
+        <div class="toggle">
+          <div>
+            <div class="label">Пинг</div>
+            <div class="desc">Показывать значение пинга в углу окна</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="showPing" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle">
+          <div>
+            <div class="label">Таймер</div>
+            <div class="desc">Время с момента начала ловли</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="showTimer" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle">
+          <div>
+            <div class="label">Счётчик попыток</div>
+            <div class="desc">Количество отправленных запросов</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="showAttempts" checked><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-save" id="saveBtn">Сохранить и применить</button>
+        <button class="btn-reset" id="resetBtn">Сбросить по умолчанию</button>
+      </div>
+      <div class="hint">Настройки применяются в игре сразу после нажатия «Сохранить». Окно ловли и это окно обмениваются данными через локальный адрес <code id="portHint">127.0.0.1</code> — держите игру запущенной во время редактирования.</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const PORT = new URLSearchParams(location.search).get('port') || '27981';
+const BASE = 'http://127.0.0.1:' + PORT;
+document.getElementById('portHint').textContent = BASE.replace('http://','');
+
+const defaults = {
+  w:250, h:68, cornerRadius:12, dashLen:10, gapLen:8, dashSpeed:25,
+  borderThickness:1.5, showPing:true, showTimer:true, showAttempts:true
+};
+let cfg = {...defaults};
+
+const ids = ['w','h','cornerRadius','dashLen','gapLen','dashSpeed','borderThickness'];
+const toggles = ['showPing','showTimer','showAttempts'];
+
+function setStatus(text, cls){
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+function applyToForm(){
+  ids.forEach(id => {
+    document.getElementById(id).value = cfg[id];
+    const valEl = document.getElementById(id+'Val');
+    if(valEl) valEl.textContent = cfg[id];
+  });
+  toggles.forEach(id => document.getElementById(id).checked = !!cfg[id]);
+  renderPreview();
+}
+
+function readForm(){
+  ids.forEach(id => cfg[id] = parseFloat(document.getElementById(id).value));
+  toggles.forEach(id => cfg[id] = document.getElementById(id).checked);
+}
+
+let dashOffset = 0;
+function renderPreview(){
+  const box = document.getElementById('catchWin');
+  box.style.width = cfg.w + 'px';
+  box.style.height = cfg.h + 'px';
+  box.style.borderRadius = cfg.cornerRadius + 'px';
+
+  document.getElementById('rowPing').style.display = cfg.showPing ? 'flex' : 'none';
+  document.getElementById('rowTimer').style.display = cfg.showTimer ? 'flex' : 'none';
+  document.getElementById('rowAtt').style.display = cfg.showAttempts ? 'flex' : 'none';
+
+  const svg = document.getElementById('borderSvg');
+  const rect = document.getElementById('borderRect');
+  svg.setAttribute('width', cfg.w);
+  svg.setAttribute('height', cfg.h);
+  svg.setAttribute('viewBox', `0 0 ${cfg.w} ${cfg.h}`);
+  rect.setAttribute('x', 1); rect.setAttribute('y', 1);
+  rect.setAttribute('width', cfg.w - 2); rect.setAttribute('height', cfg.h - 2);
+  rect.setAttribute('rx', Math.max(0, cfg.cornerRadius - 1));
+  rect.setAttribute('stroke', 'var(--accent)');
+  rect.setAttribute('stroke-width', cfg.borderThickness);
+  rect.setAttribute('stroke-dasharray', `${cfg.dashLen} ${cfg.gapLen}`);
+  rect.setAttribute('stroke-dashoffset', dashOffset);
+}
+
+function tick(){
+  dashOffset -= cfg.dashSpeed / 60;
+  const rect = document.getElementById('borderRect');
+  rect.setAttribute('stroke-dashoffset', dashOffset);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+ids.forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    readForm();
+    const valEl = document.getElementById(id+'Val');
+    if(valEl) valEl.textContent = cfg[id];
+    renderPreview();
+  });
+});
+toggles.forEach(id => {
+  document.getElementById(id).addEventListener('change', () => { readForm(); renderPreview(); });
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  cfg = {...defaults};
+  applyToForm();
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  readForm();
+  const body = new URLSearchParams();
+  Object.keys(cfg).forEach(k => body.append(k, cfg[k]));
+  try{
+    await fetch(BASE + '/save', { method:'POST', mode:'no-cors', body });
+    setStatus('сохранено — применено в игре', 'ok');
+  }catch(e){
+    setStatus('не удалось связаться со скриптом (игра запущена?)', 'err');
+  }
+});
+
+// подгружаем текущий конфиг из скрипта, если сервер уже поднят
+fetch(BASE + '/config').then(r => r.json()).then(data => {
+  cfg = {...defaults, ...data};
+  applyToForm();
+  setStatus('подключено к Load Report', 'ok');
+}).catch(() => {
+  setStatus('автономный режим — настройки по умолчанию', null);
+  applyToForm();
+});
+</script>
+</body>
+</html>
